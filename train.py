@@ -20,23 +20,50 @@ See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-a
 """
 import time
 from options.train_options import TrainOptions
+from options.test_options import TestOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import Visualizer
+from util.visualizer import Visualizer, save_images
 import wandb
+from copy import deepcopy
+from util import html
+import os
+from pytorch_fid.fid_score import calculate_fid_given_paths
+from torchvision.utils import make_grid
+import numpy as np
+import torch
 
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
+    val_opts = deepcopy(opt)
     experiment = wandb.init(name=opt.exp_name, project='CycleTransGAN')
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     print('The number of training images = %d' % dataset_size)
 
+    #Copypaste from test.py
+    val_opts.phase = 'test'
+    val_opts.num_threads = 0  # test code only supports num_threads = 0
+    val_opts.batch_size = 1  # test code only supports batch_size = 1
+    val_opts.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
+    val_opts.no_flip = True  # no flip; comment this line if results on flipped images are needed.
+    val_opts.display_id = -1
+
+    dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+    val_dataset = create_dataset(val_opts)
+    web_dir = os.path.join('fid_dir', val_opts.name,
+                           '{}_{}'.format(val_opts.phase, val_opts.epoch))  # define the website directory
+    if opt.load_iter > 0:  # load_iter is 0 by default
+        web_dir = '{:s}_iter{:d}'.format(web_dir, opt.load_iter)
+    print('creating web directory', web_dir)
+
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
+
+    webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.epoch))
 
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
@@ -78,6 +105,41 @@ if __name__ == '__main__':
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
+        
+        if epoch % opt.val_metric_freq == 0:
+            print('Evaluating FID for validation set at epoch %d, iters %d, at dataset %s' % (
+                epoch, total_iters, opt.name))
+            model.eval()
+            converted = []
+            for i, data in enumerate(val_dataset):
+                model.set_input(data)  # unpack data from data loader
+                model.test()  # run inference
+                visuals = model.get_current_visuals()  # get image results
+                if opt.direction == 'AtoB':
+                    visuals = {'fake_B': visuals['fake_B']}
+                    test_letter = 'B'
+                else:
+                    visuals = {'fake_A': visuals['fake_A']}
+                    test_letter = 'A'
+                converted.append(visuals['fake_' + test_letter].cpu())
+                img_path = model.get_image_paths()  # get image paths
+                #if i % 5 == 0:  # save images to an HTML file
+                #    print('processing (%04d)-th image... %s' % (i, img_path))
+                save_images(webpage, visuals, img_path, aspect_ratio=1,
+                            width=val_opts.display_winsize)
+            fid_value = calculate_fid_given_paths(
+                paths=('./fid_dir/{d}/test_latest/images/'.format(d=opt.name), '{d}/test'.format(d=opt.dataroot) + test_letter),
+                batch_size=64, device='cuda', dims=2048)
+            wandb.log({'FID': fid_value})
+            rand_examples = np.random.permutation(range(len(converted)))
+            converted = torch.cat(converted, 0)[rand_examples][:9]
+            all_rand = make_grid(converted, nrow=3)
+            wandb.log({"examples": [wandb.Image(all_rand, caption=f"Epoch {epoch}")]})
+
+            model.train()
+
+        print('End of epoch %d / %d \t Time Taken: %d sec' % (
+            epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
     experiment.finish()

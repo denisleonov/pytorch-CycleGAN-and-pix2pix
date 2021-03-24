@@ -36,5 +36,6 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_policy', type=str, default='linear', help='learning rate policy. [linear | step | plateau | cosine]')
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
         parser.add_argument('--exp_name', type=str, default='CycleGAN')
+        parser.add_argument('--val_metric_freq', type=int, default=1, help='frequency of FID calculating (epoch)')
         self.isTrain = True
         return parser
