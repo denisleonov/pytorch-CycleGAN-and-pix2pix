@@ -4,6 +4,9 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 
+from models import TransGAN_im2im
+from models import ViT_8_8
+
 
 ###############################################################################
 # Helper Functions
@@ -154,8 +157,13 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    elif netG == 'transgan':
+        GEN_ARGS = namedtuple("gen_args", ["bottom_width", "latent_dim", "gf_dim", "img_size", "patch_size"])
+        genargs = GEN_ARGS(8, 1024, 1024, 64, 4)
+        net = TransGAN_im2im.Generator(genargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
+        
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -198,6 +206,10 @@ def define_D(input_nc, ndf, netD, n_layers_D=3, norm='batch', init_type='normal'
         net = NLayerDiscriminator(input_nc, ndf, n_layers_D, norm_layer=norm_layer)
     elif netD == 'pixel':     # classify if each pixel is real or fake
         net = PixelDiscriminator(input_nc, ndf, norm_layer=norm_layer)
+    elif netD == 'transgan':
+        DIS_ARGS = namedtuple("gen_args", ["df_dim", "d_depth", "diff_aug", "img_size", "patch_size"])
+        disargs = DIS_ARGS(384, 7, "translation,cutout,color", 64, 4)
+        net = ViT_8_8.Discriminator(disargs)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % netD)
     return init_net(net, init_type, init_gain, gpu_ids)

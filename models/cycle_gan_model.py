@@ -75,12 +75,28 @@ class CycleGANModel(BaseModel):
         self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
 
+
         if self.isTrain:  # define discriminators
             self.netD_A = networks.define_D(opt.output_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
             self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+        print("Models are defined!!!")
+        print(self.netG_A)
+        print(self.netD_A)
 
+
+        checkpoint_file = os.path.join("./pretrained_weight/cifar_checkpoint.pth")
+        assert os.path.exists(checkpoint_file)
+        checkpoint = torch.load(checkpoint_file)
+        gen_new_state_dict = OrderedDict([(k[7:], v) for k, v in checkpoint['gen_state_dict'].items() if not k.startswith('module.deconv.0')])
+        dis_new_state_dict = OrderedDict([(k[7:], v) for k, v in checkpoint['dis_state_dict'].items() if not k.startswith('module.pos_embed')])
+        self.netG_A.load_state_dict(gen_new_state_dict, strict=False)
+        self.netG_B.load_state_dict(gen_new_state_dict, strict=False)
+        self.netD_A.load_state_dict(dis_new_state_dict, strict=False)
+        self.netD_B.load_state_dict(dis_new_state_dict, strict=False)
+
+        exit()
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
                 assert(opt.input_nc == opt.output_nc)

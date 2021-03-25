@@ -28,7 +28,7 @@ import wandb
 from copy import deepcopy
 from util import html
 import os
-from pytorch_fid.fid_score import calculate_fid_given_paths
+#from pytorch_fid.fid_score import calculate_fid_given_paths
 from torchvision.utils import make_grid
 import numpy as np
 import torch
@@ -127,10 +127,10 @@ if __name__ == '__main__':
                 #    print('processing (%04d)-th image... %s' % (i, img_path))
                 save_images(webpage, visuals, img_path, aspect_ratio=1,
                             width=val_opts.display_winsize)
-            fid_value = calculate_fid_given_paths(
+            '''fid_value = calculate_fid_given_paths(
                 paths=('./fid_dir/{d}/test_latest/images/'.format(d=opt.name), '{d}/test'.format(d=opt.dataroot) + test_letter),
                 batch_size=64, device='cuda', dims=2048)
-            wandb.log({'FID': fid_value})
+            wandb.log({'FID': fid_value})'''
             rand_examples = np.random.permutation(range(len(converted)))
             converted = torch.cat(converted, 0)[rand_examples][:9]
             all_rand = make_grid(converted, nrow=3)
