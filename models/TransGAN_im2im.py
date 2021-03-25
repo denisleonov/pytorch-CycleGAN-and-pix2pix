@@ -58,6 +58,7 @@ def get_attn_mask(N, w):
             mask[:, :, i, i-w:i] = 1
     return mask
 
+
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., is_mask=0):
         super().__init__()
@@ -199,16 +200,13 @@ class Generator(nn.Module):
         for i in range(len(self.pos_embed)):
             trunc_normal_(self.pos_embed[i], std=.02)
 
-        self.to_rgb = nn.Sequential(
-            nn.BatchNorm2d(args.gf_dim),
-            nn.ReLU(),
-            # nn.Conv2d(args.gf_dim, 3, 3, 1, 1),
-            nn.Tanh()
-        )
+        self.proj_final = nn.Linear(embed_dim // 64, embed_dim // 64)
         
         self.deconv = nn.Sequential(
             nn.Conv2d(self.embed_dim//64, 3, 1, 1, 0)
         )
+
+        self.act = nn.Tanh()
 
     def set_arch(self, x, cur_stage):
         pass
@@ -230,6 +228,8 @@ class Generator(nn.Module):
             x = x + self.pos_embed[index+1].to(x.get_device())
             for b in blk:
                 x = b(x, epoch)
-        x, H, W = pixel_upsample(x, H, W)
-        output = self.deconv(x.permute(0, 2, 1).view(-1, self.embed_dim//64, H, W))
-        return output
+        x, H, W = pixel_upsample(x, H, W) # bs, HxW, embed_dim // 64
+        x = self.proj_final(x) # bs, HxW, embed_dim // 64
+        x, H, W = pixel_upsample(x, H, W) # bs, HxW, embed_dim // 64
+        output = self.deconv(x.permute(0, 2, 1).view(-1, self.embed_dim//64, H, W)) # bs, 16, 64, 64 after view
+        return self.act(output)
