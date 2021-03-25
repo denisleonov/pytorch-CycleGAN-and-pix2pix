@@ -3,7 +3,8 @@ import itertools
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
-
+import os
+from collections import OrderedDict
 
 class CycleGANModel(BaseModel):
     """
@@ -82,21 +83,20 @@ class CycleGANModel(BaseModel):
             self.netD_B = networks.define_D(opt.input_nc, opt.ndf, opt.netD,
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
         print("Models are defined!!!")
-        print(self.netG_A)
-        print(self.netD_A)
-
 
         checkpoint_file = os.path.join("./pretrained_weight/cifar_checkpoint.pth")
         assert os.path.exists(checkpoint_file)
         checkpoint = torch.load(checkpoint_file)
-        gen_new_state_dict = OrderedDict([(k[7:], v) for k, v in checkpoint['gen_state_dict'].items() if not k.startswith('module.deconv.0')])
-        dis_new_state_dict = OrderedDict([(k[7:], v) for k, v in checkpoint['dis_state_dict'].items() if not k.startswith('module.pos_embed')])
+        gen_new_state_dict = OrderedDict([(k, v) for k, v in checkpoint['gen_state_dict'].items() if not k.startswith('module.deconv.0')])
+        dis_new_state_dict = OrderedDict([(k, v) for k, v in checkpoint['dis_state_dict'].items() if not k.startswith('module.pos_embed')])
         self.netG_A.load_state_dict(gen_new_state_dict, strict=False)
         self.netG_B.load_state_dict(gen_new_state_dict, strict=False)
         self.netD_A.load_state_dict(dis_new_state_dict, strict=False)
         self.netD_B.load_state_dict(dis_new_state_dict, strict=False)
+        print("Weights are loaded!!!")
 
-        exit()
+        print("Training: ", self.isTrain)
+
         if self.isTrain:
             if opt.lambda_identity > 0.0:  # only works when input and output images have the same number of channels
                 assert(opt.input_nc == opt.output_nc)
@@ -125,12 +125,12 @@ class CycleGANModel(BaseModel):
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
-    def forward(self):
+    def forward(self, epoch):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG_A(self.real_A)  # G_A(A)
-        self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A))
-        self.fake_A = self.netG_B(self.real_B)  # G_B(B)
-        self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
+        self.fake_B = self.netG_A(self.real_A, epoch)  # G_A(A)
+        self.rec_A = self.netG_B(self.fake_B, epoch)   # G_B(G_A(A))
+        self.fake_A = self.netG_B(self.real_B, epoch)  # G_B(B)
+        self.rec_B = self.netG_A(self.fake_A, epoch)   # G_A(G_B(B))
 
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator
@@ -164,7 +164,7 @@ class CycleGANModel(BaseModel):
         fake_A = self.fake_A_pool.query(self.fake_A)
         self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
 
-    def backward_G(self):
+    def backward_G(self, epoch):
         """Calculate the loss for generators G_A and G_B"""
         lambda_idt = self.opt.lambda_identity
         lambda_A = self.opt.lambda_A
@@ -172,10 +172,10 @@ class CycleGANModel(BaseModel):
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
-            self.idt_A = self.netG_A(self.real_B)
+            self.idt_A = self.netG_A(self.real_B, epoch)
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
             # G_B should be identity if real_A is fed: ||G_B(A) - A||
-            self.idt_B = self.netG_B(self.real_A)
+            self.idt_B = self.netG_B(self.real_A, epoch)
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
         else:
             self.loss_idt_A = 0
@@ -193,14 +193,14 @@ class CycleGANModel(BaseModel):
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
         self.loss_G.backward()
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, epoch):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
         # forward
-        self.forward()      # compute fake images and reconstruction images.
+        self.forward(epoch)      # compute fake images and reconstruction images.
         # G_A and G_B
         self.set_requires_grad([self.netD_A, self.netD_B], False)  # Ds require no gradients when optimizing Gs
         self.optimizer_G.zero_grad()  # set G_A and G_B's gradients to zero
-        self.backward_G()             # calculate gradients for G_A and G_B
+        self.backward_G(epoch)             # calculate gradients for G_A and G_B
         self.optimizer_G.step()       # update G_A and G_B's weights
         # D_A and D_B
         self.set_requires_grad([self.netD_A, self.netD_B], True)

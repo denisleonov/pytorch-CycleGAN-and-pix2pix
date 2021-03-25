@@ -102,14 +102,17 @@ class BaseModel(ABC):
                 net = getattr(self, 'net' + name)
                 net.train()
 
-    def test(self):
+    def test(self, epoch=None):
         """Forward function used in test time.
 
         This function wraps <forward> function in no_grad() so we don't save intermediate steps for backprop
         It also calls <compute_visuals> to produce additional visualization results
         """
         with torch.no_grad():
-            self.forward()
+            if epoch:
+                self.forward(epoch)
+            else:
+                self.forward()
             self.compute_visuals()
 
     def compute_visuals(self):

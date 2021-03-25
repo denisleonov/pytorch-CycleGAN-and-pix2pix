@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
+from collections import namedtuple
 
 from models import TransGAN_im2im
 from models import ViT_8_8

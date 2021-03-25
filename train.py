@@ -32,6 +32,7 @@ from pytorch_fid.fid_score import calculate_fid_given_paths
 from torchvision.utils import make_grid
 import numpy as np
 import torch
+import os
 
 
 if __name__ == '__main__':
@@ -79,7 +80,7 @@ if __name__ == '__main__':
             total_iters += opt.batch_size
             epoch_iter += opt.batch_size
             model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
+            model.optimize_parameters(epoch)   # calculate loss functions, get gradients, update network weights
 
             losses = model.get_current_losses()
             wandb.log(losses)
@@ -113,7 +114,7 @@ if __name__ == '__main__':
             converted = []
             for i, data in enumerate(val_dataset):
                 model.set_input(data)  # unpack data from data loader
-                model.test()  # run inference
+                model.test(epoch)  # run inference
                 visuals = model.get_current_visuals()  # get image results
                 if opt.direction == 'AtoB':
                     visuals = {'fake_B': visuals['fake_B']}
