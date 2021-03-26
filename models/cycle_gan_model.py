@@ -84,14 +84,14 @@ class CycleGANModel(BaseModel):
                                             opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
         print("Models are defined!!!")
 
-        checkpoint_file = os.path.join("./pretrained_weight/cifar_checkpoint.pth")
+        checkpoint_file = os.path.join(opt.checkpoint)
         assert os.path.exists(checkpoint_file)
         checkpoint = torch.load(checkpoint_file)
         gen_new_state_dict = OrderedDict([(k, v) for k, v in checkpoint['gen_state_dict'].items() if not k.startswith('module.deconv.0')])
         dis_new_state_dict = OrderedDict([(k, v) for k, v in checkpoint['dis_state_dict'].items() if not k.startswith('module.pos_embed')])
-        self.netG_A.load_state_dict(gen_new_state_dict, strict=False)
+        print(self.netG_A.load_state_dict(gen_new_state_dict, strict=False))
         self.netG_B.load_state_dict(gen_new_state_dict, strict=False)
-        self.netD_A.load_state_dict(dis_new_state_dict, strict=False)
+        print(self.netD_A.load_state_dict(dis_new_state_dict, strict=False))
         self.netD_B.load_state_dict(dis_new_state_dict, strict=False)
         print("Weights are loaded!!!")
 
