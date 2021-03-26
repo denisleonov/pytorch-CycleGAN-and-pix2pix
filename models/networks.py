@@ -161,7 +161,7 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'transgan':
         GEN_ARGS = namedtuple("gen_args", ["bottom_width", "latent_dim", "gf_dim", "img_size", "patch_size"])
         genargs = GEN_ARGS(8, 1024, 1024, 64, 4)
-        net = TransGAN_im2im.Generator(genargs)
+        net = TransGAN_im2im.GeneratorV2(genargs)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
         
