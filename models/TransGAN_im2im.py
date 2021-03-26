@@ -140,11 +140,11 @@ def pixel_upsample(x, H, W):
     return x, H, W
 
 
-class GeneratorV2(nn.Module):
+class GeneratorCeleba(nn.Module):
     def __init__(self, args, img_size=224, patch_size=16, in_chans=3, num_classes=10, embed_dim=384, depth=5,
                  num_heads=4, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm):
-        super(Generator, self).__init__()
+        super(GeneratorV2, self).__init__()
         self.args = args
         self.ch = embed_dim
         self.bottom_width = args.bottom_width
@@ -159,10 +159,12 @@ class GeneratorV2(nn.Module):
         self.pos_embed_1 = nn.Parameter(torch.zeros(1, self.bottom_width**2, embed_dim))
         self.pos_embed_2 = nn.Parameter(torch.zeros(1, (self.bottom_width*2)**2, embed_dim//4))
         self.pos_embed_3 = nn.Parameter(torch.zeros(1, (self.bottom_width*4)**2, embed_dim//16))
+        self.pos_embed_4 = nn.Parameter(torch.zeros(1, (self.bottom_width*8)**2, embed_dim//64))
         self.pos_embed = [
             self.pos_embed_1,
             self.pos_embed_2,
-            self.pos_embed_3
+            self.pos_embed_3,
+            self.pos_embed_4
         ]
         is_mask = True
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
@@ -173,9 +175,9 @@ class GeneratorV2(nn.Module):
             for i in range(depth)])
         self.upsample_blocks = nn.ModuleList([
                  nn.ModuleList([
-#                     Block(
-#                         dim=embed_dim//4, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-#                         drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer),
+                    Block(
+                        dim=embed_dim//4, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer),
                     Block(
                         dim=embed_dim//4, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer, is_mask=0),
@@ -185,15 +187,27 @@ class GeneratorV2(nn.Module):
                  ]
                 ),
                  nn.ModuleList([
-#                     Block(
-#                         dim=embed_dim//16, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-#                         drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer),
+                    Block(
+                        dim=embed_dim//16, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer),
                     Block(
                         dim=embed_dim//16, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                         drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer, is_mask=0),
                     Block(
                         dim=embed_dim//16, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer, is_mask=(self.bottom_width*4)**2)
+                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer, is_mask=0)
+                 ]
+                ),
+                nn.ModuleList([
+                    # Block(
+                    #     dim=embed_dim//16, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                    #     drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer),
+                    Block(
+                        dim=embed_dim//64, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer, is_mask=0),
+                    Block(
+                        dim=embed_dim//64, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                        drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, norm_layer=norm_layer, is_mask=(self.bottom_width*8)**2)
                  ]
                 )
                 ])
@@ -201,7 +215,9 @@ class GeneratorV2(nn.Module):
             trunc_normal_(self.pos_embed[i], std=.02)
 
         self.deconv = nn.Sequential(
-            nn.Conv2d(self.embed_dim//64, 3, 1, 1, 0)
+            # nn.BatchNorm2d(self.embed_dim),
+            # nn.ReLU(),
+            nn.Conv2d(self.embed_dim//128, 3, 1, 1, 0)
         )
 
         self.act = nn.Tanh()
@@ -220,6 +236,8 @@ class GeneratorV2(nn.Module):
         for index, blk in enumerate(self.blocks):
             x = blk(x, epoch)
         for index, blk in enumerate(self.upsample_blocks):
+            # x = x.permute(0,2,1)
+            # x = x.view(-1, self.embed_dim, H, W)
             x, H, W = pixel_upsample(x, H, W)
             x = x + self.pos_embed[index+1].to(x.get_device())
             for b in blk:
