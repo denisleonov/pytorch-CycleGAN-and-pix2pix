@@ -144,7 +144,7 @@ class GeneratorCeleba(nn.Module):
     def __init__(self, args, img_size=224, patch_size=16, in_chans=3, num_classes=10, embed_dim=384, depth=5,
                  num_heads=4, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm):
-        super(GeneratorV2, self).__init__()
+        super().__init__()
         self.args = args
         self.ch = embed_dim
         self.bottom_width = args.bottom_width
@@ -154,7 +154,8 @@ class GeneratorCeleba(nn.Module):
         self.patch_embed = nn.Conv2d(3, embed_dim, kernel_size=patch_size, stride=patch_size, padding=0)
         num_patches = (args.img_size // patch_size)**2
         self.proj_1 = nn.Linear(num_patches, num_patches // 2)
-        self.proj_2 = nn.Linear(num_patches // 2, self.bottom_width ** 2)
+        self.proj_2 = nn.Linear(num_patches // 2, num_patches // 4)
+        self.proj_3 = nn.Linear(num_patches // 4, self.bottom_width ** 2)
 
         self.pos_embed_1 = nn.Parameter(torch.zeros(1, self.bottom_width**2, embed_dim))
         self.pos_embed_2 = nn.Parameter(torch.zeros(1, (self.bottom_width*2)**2, embed_dim//4))
@@ -217,7 +218,7 @@ class GeneratorCeleba(nn.Module):
         self.deconv = nn.Sequential(
             # nn.BatchNorm2d(self.embed_dim),
             # nn.ReLU(),
-            nn.Conv2d(self.embed_dim//128, 3, 1, 1, 0)
+            nn.Conv2d(self.embed_dim//256, 3, 1, 1, 0)
         )
 
         self.act = nn.Tanh()
@@ -228,7 +229,8 @@ class GeneratorCeleba(nn.Module):
     def forward(self, x, epoch):
         x = self.patch_embed(x).flatten(2)
         x = self.proj_1(x)
-        x = self.proj_2(x).permute(0, 2, 1)
+        x = self.proj_2(x)
+        x = self.proj_3(x).permute(0, 2, 1)
 
         x = x + self.pos_embed[0].to(x.get_device())
         B = x.size()
@@ -244,8 +246,8 @@ class GeneratorCeleba(nn.Module):
                 x = b(x, epoch)
 
         x, H, W = pixel_upsample(x, H, W)
-        output = self.deconv(x.permute(0, 2, 1).view(-1, self.embed_dim//64, H, W))
-        
+        output = self.deconv(x.permute(0, 2, 1).view(-1, self.embed_dim//256, H, W))
+
         return self.act(output)
 
 
