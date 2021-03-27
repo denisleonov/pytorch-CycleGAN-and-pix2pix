@@ -251,11 +251,11 @@ class GeneratorCeleba(nn.Module):
         return self.act(output)
 
 
-class Generator(nn.Module):
+class GeneratorCifar(nn.Module):
     def __init__(self, args, img_size=224, patch_size=4, in_chans=3, num_classes=10, embed_dim=384, depth=5,
                  num_heads=4, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm):
-        super(Generator, self).__init__()
+        super().__init__()
         self.args = args
         self.ch = embed_dim
         self.bottom_width = args.bottom_width
